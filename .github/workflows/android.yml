@@ -28,23 +28,73 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
 
-      - name: Build debug APK
-        run: cd android && ./gradlew assembleDebug --no-daemon
+      - name: Determine build target
+        id: build_config
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            echo "gradle_task=assembleRelease" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=shorts-or-pants-release" >> "$GITHUB_OUTPUT"
+            echo "artifact_path=android/app/build/outputs/apk/release/app-release.apk" >> "$GITHUB_OUTPUT"
+            echo "artifact_filename=shorts-or-pants-release.apk" >> "$GITHUB_OUTPUT"
+            echo "release_build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "gradle_task=assembleDebug" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=shorts-or-pants-debug" >> "$GITHUB_OUTPUT"
+            echo "artifact_path=android/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_OUTPUT"
+            echo "artifact_filename=shorts-or-pants-debug.apk" >> "$GITHUB_OUTPUT"
+            echo "release_build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate release signing secrets
+        if: steps.build_config.outputs.release_build == 'true'
+        env:
+          ANDROID_CI_KEYSTORE_BASE64: ${{ secrets.ANDROID_CI_KEYSTORE_BASE64 }}
+          ANDROID_CI_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_CI_KEYSTORE_PASSWORD }}
+          ANDROID_CI_KEY_ALIAS: ${{ secrets.ANDROID_CI_KEY_ALIAS }}
+          ANDROID_CI_KEY_PASSWORD: ${{ secrets.ANDROID_CI_KEY_PASSWORD }}
+        run: |
+          for secret_name in ANDROID_CI_KEYSTORE_BASE64 ANDROID_CI_KEYSTORE_PASSWORD ANDROID_CI_KEY_ALIAS ANDROID_CI_KEY_PASSWORD; do
+            if [[ -z "${!secret_name}" ]]; then
+              echo "::error::Missing required secret: ${secret_name}"
+              exit 1
+            fi
+          done
+
+      - name: Configure release signing
+        if: steps.build_config.outputs.release_build == 'true'
+        env:
+          ANDROID_CI_KEYSTORE_BASE64: ${{ secrets.ANDROID_CI_KEYSTORE_BASE64 }}
+          ANDROID_CI_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_CI_KEYSTORE_PASSWORD }}
+          ANDROID_CI_KEY_ALIAS: ${{ secrets.ANDROID_CI_KEY_ALIAS }}
+          ANDROID_CI_KEY_PASSWORD: ${{ secrets.ANDROID_CI_KEY_PASSWORD }}
+        run: |
+          echo "$ANDROID_CI_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/ci-signing.keystore"
+          {
+            echo "CI_KEYSTORE_PATH=$RUNNER_TEMP/ci-signing.keystore"
+            echo "CI_KEYSTORE_PASSWORD=$ANDROID_CI_KEYSTORE_PASSWORD"
+            echo "CI_KEY_ALIAS=$ANDROID_CI_KEY_ALIAS"
+            echo "CI_KEY_PASSWORD=$ANDROID_CI_KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Build APK
+        env:
+          CI_VERSION_CODE: ${{ github.run_number }}
+        run: cd android && ./gradlew ${{ steps.build_config.outputs.gradle_task }} --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: shorts-or-pants-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: ${{ steps.build_config.outputs.artifact_name }}
+          path: ${{ steps.build_config.outputs.artifact_path }}
           retention-days: 30
 
       - name: Commit APK to repository
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           mkdir -p releases
-          cp android/app/build/outputs/apk/debug/app-debug.apk releases/shorts-or-pants-debug.apk
+          cp "${{ steps.build_config.outputs.artifact_path }}" "releases/${{ steps.build_config.outputs.artifact_filename }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add releases/shorts-or-pants-debug.apk
-          git diff --cached --quiet || git commit -m "chore: update debug APK [skip ci]"
+          git add "releases/${{ steps.build_config.outputs.artifact_filename }}"
+          git diff --cached --quiet || git commit -m "chore: update Android APK [skip ci]"
           git push
