@@ -4,12 +4,17 @@ plugins {
 }
 
 def ciVersionCodeValue = providers.environmentVariable("CI_VERSION_CODE").orNull
-def resolvedVersionCode = ciVersionCodeValue?.isInteger() ? ciVersionCodeValue.toInteger() : 1
+def resolvedVersionCode = 1
+if (ciVersionCodeValue != null && ciVersionCodeValue ==~ /\d+/) {
+    resolvedVersionCode = ciVersionCodeValue.toInteger()
+}
 def ciKeystorePath = providers.environmentVariable("CI_KEYSTORE_PATH").orNull
 def ciKeystorePassword = providers.environmentVariable("CI_KEYSTORE_PASSWORD").orNull
 def ciKeyAlias = providers.environmentVariable("CI_KEY_ALIAS").orNull
 def ciKeyPassword = providers.environmentVariable("CI_KEY_PASSWORD").orNull
-def hasCiSigning = [ciKeystorePath, ciKeystorePassword, ciKeyAlias, ciKeyPassword].every { it }
+def hasCiSigning = [ciKeystorePath, ciKeystorePassword, ciKeyAlias, ciKeyPassword].every {
+    it != null && !it.trim().isEmpty()
+}
 
 android {
     namespace 'com.jonassode.shortsorpants'
