@@ -12,9 +12,10 @@ def ciKeystorePath = providers.environmentVariable("CI_KEYSTORE_PATH").orNull
 def ciKeystorePassword = providers.environmentVariable("CI_KEYSTORE_PASSWORD").orNull
 def ciKeyAlias = providers.environmentVariable("CI_KEY_ALIAS").orNull
 def ciKeyPassword = providers.environmentVariable("CI_KEY_PASSWORD").orNull
-def hasCiSigning = [ciKeystorePath, ciKeystorePassword, ciKeyAlias, ciKeyPassword].every { value ->
+def hasCiSigningValues = [ciKeystorePath, ciKeystorePassword, ciKeyAlias, ciKeyPassword].every { value ->
     value != null && !value.toString().trim().isEmpty()
-} && file(ciKeystorePath).exists()
+}
+def hasCiSigning = hasCiSigningValues && ciKeystorePath != null && file(ciKeystorePath).exists()
 
 android {
     namespace 'com.jonassode.shortsorpants'
