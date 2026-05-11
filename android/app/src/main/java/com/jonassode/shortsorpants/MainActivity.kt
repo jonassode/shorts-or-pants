@@ -2,8 +2,10 @@ package com.jonassode.shortsorpants
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.webkit.GeolocationPermissions
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -27,9 +29,17 @@ class MainActivity : AppCompatActivity() {
         geolocationCallback?.invoke(geolocationOrigin, granted, false)
     }
 
+    private val notificationPermissionRequest = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* permission result handled silently */ }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        NotificationHelper.createChannel(this)
+        AlarmReceiver.schedule(this)
+        requestNotificationPermissionIfNeeded()
 
         webView = findViewById(R.id.webView)
         setupWebView()
@@ -52,6 +62,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermissionRequest.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
     private fun setupWebView() {
         val settings: WebSettings = webView.settings
         settings.javaScriptEnabled = true
@@ -60,6 +80,7 @@ class MainActivity : AppCompatActivity() {
         settings.setGeolocationEnabled(true)
         settings.allowFileAccess = true
 
+        webView.addJavascriptInterface(AndroidBridge(), "Android")
         webView.webViewClient = WebViewClient()
         webView.webChromeClient = object : WebChromeClient() {
             override fun onGeolocationPermissionsShowPrompt(
@@ -92,5 +113,17 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         webView.saveState(outState)
+    }
+
+    /** Exposed to JavaScript as `window.Android.saveCoords(lat, lon)` */
+    inner class AndroidBridge {
+        @JavascriptInterface
+        fun saveCoords(lat: Double, lon: Double) {
+            getSharedPreferences("location", MODE_PRIVATE)
+                .edit()
+                .putString("lat", lat.toString())
+                .putString("lon", lon.toString())
+                .apply()
+        }
     }
 }

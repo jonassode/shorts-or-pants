@@ -227,9 +227,19 @@
       }
 
       navigator.geolocation.getCurrentPosition(
-        pos => run(pos.coords.latitude, pos.coords.longitude).catch(() => {
-          showError('Could not fetch weather data. Please try again.');
-        }),
+        async pos => {
+          const { latitude: lat, longitude: lon } = pos.coords;
+
+          // Persist coordinates so the native Android alarm can fetch
+          // weather at 8 am without requiring the app to be open
+          if (window.Android && window.Android.saveCoords) {
+            window.Android.saveCoords(lat, lon);
+          }
+
+          run(lat, lon).catch(() => {
+            showError('Could not fetch weather data. Please try again.');
+          });
+        },
         () => showError('Location access denied. Please allow location access and try again.')
       );
     }
