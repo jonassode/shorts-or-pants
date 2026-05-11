@@ -37,6 +37,7 @@ jobs:
             echo "artifact_name=shorts-or-pants-release" >> "$GITHUB_OUTPUT"
             echo "artifact_path=android/app/build/outputs/apk/release/app-release.apk" >> "$GITHUB_OUTPUT"
             echo "artifact_filename=shorts-or-pants-release.apk" >> "$GITHUB_OUTPUT"
+            echo "release_dir=releases" >> "$GITHUB_OUTPUT"
             echo "release_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "is_main_push=false" >> "$GITHUB_OUTPUT"
@@ -44,6 +45,7 @@ jobs:
             echo "artifact_name=shorts-or-pants-debug" >> "$GITHUB_OUTPUT"
             echo "artifact_path=android/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_OUTPUT"
             echo "artifact_filename=shorts-or-pants-debug.apk" >> "$GITHUB_OUTPUT"
+            echo "release_dir=releases" >> "$GITHUB_OUTPUT"
             echo "release_build=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -71,6 +73,7 @@ jobs:
           ANDROID_CI_KEY_PASSWORD: ${{ secrets.ANDROID_CI_KEY_PASSWORD }}
         run: |
           echo "$ANDROID_CI_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/ci-signing.keystore"
+          chmod 600 "$RUNNER_TEMP/ci-signing.keystore"
           {
             echo "CI_KEYSTORE_PATH=$RUNNER_TEMP/ci-signing.keystore"
             echo "CI_KEYSTORE_PASSWORD=$ANDROID_CI_KEYSTORE_PASSWORD"
@@ -93,10 +96,10 @@ jobs:
       - name: Commit APK to repository
         if: steps.build_config.outputs.is_main_push == 'true'
         run: |
-          mkdir -p releases
-          cp "${{ steps.build_config.outputs.artifact_path }}" "releases/${{ steps.build_config.outputs.artifact_filename }}"
+          mkdir -p "${{ steps.build_config.outputs.release_dir }}"
+          cp "${{ steps.build_config.outputs.artifact_path }}" "${{ steps.build_config.outputs.release_dir }}/${{ steps.build_config.outputs.artifact_filename }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "releases/${{ steps.build_config.outputs.artifact_filename }}"
+          git add "${{ steps.build_config.outputs.release_dir }}/${{ steps.build_config.outputs.artifact_filename }}"
           git diff --cached --quiet || git commit -m "chore: update Android APK [skip ci]"
           git push
